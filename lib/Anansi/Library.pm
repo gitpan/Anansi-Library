@@ -39,7 +39,7 @@ module object instances.
 =cut
 
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 
 my $LIBRARY = {};
@@ -48,6 +48,114 @@ my $LIBRARY = {};
 =head1 METHODS
 
 =cut
+
+
+=head2 abstractClosure
+
+ my $CLOSURE = Anansi::Library->abstractClosure(
+  'Some::Namespace',
+  'someKey' => 'some data',
+  'anotherKey' => 'Subroutine::Namespace',
+  'yetAnotherKey' => Namespace::someSubroutine,
+ );
+ $CLOSURE->anotherKey();
+ $CLOSURE->yetAnotherKey();
+
+ sub Subroutine::Namespace {
+     my ($self, $closure, %parameters) = @_;
+     my $abc = %{$closure}->{abc} || 'something';
+     %{$closure}->{def} = 'anything';
+ }
+
+Create a blessed object with the namespace as defined in the first parameter and
+initialise the object with the subsequent KEY/VALUE pairs, storing them within a
+HASH that is only accessible from within the scope of the object.  A VALUE
+containing a subroutine namespace STRING or a CODEREF will be interpreted as an
+object method and will be passed the locally accessible HASH when executed.
+
+=cut
+
+
+sub abstractClosure {
+    my (undef, $abstract, %parameters) = @_;
+    my $ABSTRACT = {
+        NAMESPACE => $abstract,
+    };
+    my $CLOSURE = {
+    };
+    foreach my $key (keys(%parameters)) {
+        next if('NAMESPACE' eq $key);
+        if(ref($parameters{$key}) =~ /^CODE$/i) {
+            *{$abstract.'::'.$key} = sub {
+                my ($self, @PARAMETERS) = @_;
+                return &{$parameters{$key}}($self, $CLOSURE, (@PARAMETERS));
+            };
+        } elsif(ref($parameters{$key}) !~ /^$/i) {
+            $CLOSURE->{$key} = $parameters{$key};
+        } elsif($parameters{$key} =~ /^[a-zA-Z]+[a-zA-Z0-9_]*(::[a-zA-Z]+[a-zA-Z0-9_]*)+$/) {
+            if(exists(&{$parameters{$key}})) {
+                *{$abstract.'::'.$key} = sub {
+                    my ($self, @PARAMETERS) = @_;
+                    return &{\&{$parameters{$key}}}($self, $CLOSURE, (@PARAMETERS));
+                };
+            } else {
+                $CLOSURE->{$key} = $parameters{$key}
+            }
+        } else {
+            $CLOSURE->{$key} = $parameters{$key};
+        }
+    }
+    return bless($ABSTRACT, $abstract);
+}
+
+
+=head2 abstractObject
+
+ my $OBJECT = Anansi::Library->abstractObject(
+  'Some::Namespace',
+  'someKey' => 'some data',
+  'anotherKey' => 'Subroutine::Namespace',
+  'yetAnotherKey' => Namespace::someSubroutine,
+ );
+ $OBJECT->anotherKey();
+ $OBJECT->yetAnotherKey();
+
+ sub Subroutine::Namespace {
+     my ($self, %parameters) = @_;
+     my $abc = $self->{abc} || 'something';
+     $self->{def} = 'anything';
+ }
+
+Create a blessed object with the namespace as defined in the first parameter and
+initialise the object with the subsequent KEY/VALUE pairs.  A VALUE containing a
+subroutine namespace STRING or a CODEREF will be defined as an object method.
+
+=cut
+
+
+sub abstractObject {
+    my (undef, $abstract, %parameters) = @_;
+    my $ABSTRACT = {
+        NAMESPACE => $abstract,
+    };
+    foreach my $key (keys(%parameters)) {
+        next if('NAMESPACE' eq $key);
+        if(ref($parameters{$key}) =~ /^CODE$/i) {
+            *{$abstract.'::'.$key} = $parameters{$key};
+        } elsif(ref($parameters{$key}) !~ /^$/i) {
+            $ABSTRACT->{$key} = $parameters{$key};
+        } elsif($parameters{$key} =~ /^[a-zA-Z]+[a-zA-Z0-9_]*(::[a-zA-Z]+[a-zA-Z0-9_]*)+$/) {
+            if(exists(&{$parameters{$key}})) {
+                *{$abstract.'::'.$key} = *{$parameters{$key}};
+            } else {
+                $ABSTRACT->{$key} = $parameters{$key}
+            }
+        } else {
+            $ABSTRACT->{$key} = $parameters{$key};
+        }
+    }
+    return bless($ABSTRACT, $abstract);
+}
 
 
 =head2 hasAncestor
